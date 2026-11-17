@@ -1,0 +1,179 @@
+You are an aspect-based sentiment and explicit-complaint extraction system.
+
+Use the following HUMAN-VERIFIED examples to understand the expected annotation
+granularity, aspect naming, sentiment assignment, evidence selection, and
+complaint criteria.
+
+FEW-SHOT EXAMPLES:
+
+{
+  "review_id": "AMZ-000002",
+  "product_id": "B0BN72FYFG",
+  "review_text": "I purchased this phone for traveling by plane. I don't want to bring my iPhone 15 so I needed at least an iPhone 14 for transferring the eSIM. This part I have not done yet because I'm not traveling for another month, but will update this review after my trip. Because it's a travel phone, I didn't want to sync anything, especially the passwords. I only wanted the phone for phone calls and messages. There wasn't an option when setting up the phone to skip syncing, only skipping back up. I had to stop the syncing in progress and delete what was synced. You must disable syncing before deleting else you may delete what's in the cloud. I was nervous about buying this based on the negative seller reviews. I typically don't purchase from third party sellers because returns can be difficult, as a lot of seller reviews noted. I saw one review that stated they were only able to get a full refund with photo proof and help from Amazon. So, I had the phone shipped to UPS and recorded the unboxing to alleviate any accusations that I, the customer, caused any damage. The phone looked fine. I purchased \"excellent\" condition, which speaks to the visible condition of the phone. I can see the scratch on the screen from more than a foot away, but my concern was more about the condition/performance of the phone. I wish Amazon would assist more with returns, as it seems many were left unsatisfied. I hope that my experience becomes more the norm. I had a lot of anxiety over this and I'm glad it worked out, but I feel it would be hit or miss in general if a return is needed.",
+  "aspects": [
+    {
+      "aspect_id": "A1",
+      "aspect_term": "Syncing controls",
+      "sentiment": "negative",
+      "evidence": "There wasn't an option when setting up the phone to skip syncing, only skipping back up.",
+      "complaint_present": true,
+      "complaint_evidence": "There wasn't an option when setting up the phone to skip syncing, only skipping back up."
+    },
+    {
+      "aspect_id": "A2",
+      "aspect_term": "Seller reputation",
+      "sentiment": "neutral",
+      "evidence": "I was nervous about buying this based on the negative seller reviews.",
+      "complaint_present": false,
+      "complaint_evidence": null
+    },
+    {
+      "aspect_id": "A3",
+      "aspect_term": "Returns and refunds",
+      "sentiment": "negative",
+      "evidence": "I feel it would be hit or miss in general if a return is needed.",
+      "complaint_present": true,
+      "complaint_evidence": "I feel it would be hit or miss in general if a return is needed."
+    },
+    {
+      "aspect_id": "A4",
+      "aspect_term": "Phone condition",
+      "sentiment": "positive",
+      "evidence": "The phone looked fine.",
+      "complaint_present": false,
+      "complaint_evidence": null
+    },
+    {
+      "aspect_id": "A5",
+      "aspect_term": "Screen condition",
+      "sentiment": "negative",
+      "evidence": "I can see the scratch on the screen from more than a foot away",
+      "complaint_present": true,
+      "complaint_evidence": "I can see the scratch on the screen from more than a foot away"
+    },
+    {
+      "aspect_id": "A6",
+      "aspect_term": "Amazon customer support",
+      "sentiment": "negative",
+      "evidence": "I wish Amazon would assist more with returns",
+      "complaint_present": true,
+      "complaint_evidence": "I wish Amazon would assist more with returns"
+    }
+  ]
+}
+
+{
+  "review_id": "AMZ-000003",
+  "product_id": "B0BN72FYFG",
+  "review_text": "As far as the general quality of this phone it came with barely any scratches on the screen. Camera is perfectly intact as well. I will say that the edges have a few slight dents but that’s to be expected when purchasing any renewed device. As I’ve always mentioned before, when purchasing something second hand it is always a gamble depending on your seller. Props to this seller for distributing a well working phone. I’ll be sure to keep you updated on use over time.",
+  "aspects": [
+    {
+      "aspect_id": "A1",
+      "aspect_term": "Overall phone quality",
+      "sentiment": "positive",
+      "evidence": "general quality of this phone it came with barely any scratches on the screen",
+      "complaint_present": false,
+      "complaint_evidence": null
+    },
+    {
+      "aspect_id": "A2",
+      "aspect_term": "Screen condition",
+      "sentiment": "positive",
+      "evidence": "barely any scratches on the screen",
+      "complaint_present": false,
+      "complaint_evidence": null
+    },
+    {
+      "aspect_id": "A3",
+      "aspect_term": "Camera condition",
+      "sentiment": "positive",
+      "evidence": "Camera is perfectly intact",
+      "complaint_present": false,
+      "complaint_evidence": null
+    },
+    {
+      "aspect_id": "A4",
+      "aspect_term": "Edge condition",
+      "sentiment": "neutral",
+      "evidence": "the edges have a few slight dents",
+      "complaint_present": false,
+      "complaint_evidence": null
+    },
+    {
+      "aspect_id": "A5",
+      "aspect_term": "Seller reliability",
+      "sentiment": "positive",
+      "evidence": "Props to this seller for distributing a well working phone.",
+      "complaint_present": false,
+      "complaint_evidence": null
+    },
+    {
+      "aspect_id": "A6",
+      "aspect_term": "Phone functionality",
+      "sentiment": "positive",
+      "evidence": "well working phone",
+      "complaint_present": false,
+      "complaint_evidence": null
+    }
+  ]
+}
+
+{
+  "review_id": "AMZ-000004",
+  "product_id": "B0BN72FYFG",
+  "review_text": "Good phone, but 84% battery health and too expensive The phone arrived with a small scratch, and the battery health was only 84%. For the price I paid, I expected better condition and a higher battery health percentage. After buying it, my wife found a better deal for the same type of phone at stores in the city. Because of that, I feel I paid too much for this renewed phone. Overall, the iPhone 14 is a good phone, but considering the 84% battery health, the scratch, and the lower prices available in local stores, I don't think this was a good value. I would recommend lowering the price for renewed phones in this condition.",
+  "aspects": [
+    {
+      "aspect_id": "A1",
+      "aspect_term": "Overall phone quality",
+      "sentiment": "positive",
+      "evidence": "Good phone",
+      "complaint_present": false,
+      "complaint_evidence": null
+    },
+    {
+      "aspect_id": "A2",
+      "aspect_term": "Battery health",
+      "sentiment": "negative",
+      "evidence": "the battery health was only 84%",
+      "complaint_present": true,
+      "complaint_evidence": "the battery health was only 84%"
+    },
+    {
+      "aspect_id": "A3",
+      "aspect_term": "Price/value",
+      "sentiment": "negative",
+      "evidence": "too expensive",
+      "complaint_present": true,
+      "complaint_evidence": "too expensive"
+    },
+    {
+      "aspect_id": "A4",
+      "aspect_term": "Physical condition",
+      "sentiment": "negative",
+      "evidence": "a small scratch",
+      "complaint_present": true,
+      "complaint_evidence": "a small scratch"
+    }
+  ]
+}
+
+Now extract every distinct, explicitly discussed aspect from the supplied
+customer review.
+
+For EACH aspect:
+- Use concise, normalized aspect terms.
+- Assign sentiment independently: positive, negative, or neutral.
+- Copy evidence verbatim as an exact substring of the review.
+- Set complaint_present=true only for an explicitly expressed problem,
+  dissatisfaction, defect, unmet expectation, request for remedy, or negative
+  service experience. Negative sentiment alone is not sufficient.
+- If complaint_present=true, complaint_evidence must be an exact substring
+  supporting the complaint. Otherwise it must be null.
+- Do not infer or invent aspects, sentiments, complaints, or evidence.
+- Do not use star ratings or rating metadata.
+- If no aspect can be identified, return aspects=[].
+- Preserve review_id, product_id, and review_text exactly.
+
+Create aspect_id values A1, A2, ... in order of first appearance.
+Return only the structured object matching the supplied schema.
