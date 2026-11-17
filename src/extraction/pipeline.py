@@ -24,6 +24,69 @@ def append_jsonl(path, obj):
     with path.open("a", encoding="utf-8") as f:
         f.write(json.dumps(obj, ensure_ascii=False)+"\n")
 
+
+def export_predictions_csv(jsonl_path, csv_path):
+    """Export validated extraction records as one CSV row per aspect.
+
+    Reviews with no extracted aspects are retained with empty aspect fields.
+    """
+    jsonl_path = Path(jsonl_path)
+    csv_path = Path(csv_path)
+
+    columns = [
+        "review_id", "product_id", "review_text", "extraction_status",
+        "aspect_id", "aspect_term", "sentiment", "evidence",
+        "complaint_present", "complaint_evidence",
+    ]
+
+    rows = []
+    if jsonl_path.exists():
+        for line_number, line in enumerate(
+            jsonl_path.read_text(encoding="utf-8").splitlines(), 1
+        ):
+            if not line.strip():
+                continue
+
+            try:
+                record = ExtractionRecord.model_validate_json(line)
+            except Exception as exc:
+                raise ValueError(
+                    f"Invalid extraction record at {jsonl_path}:{line_number}: {exc}"
+                ) from exc
+
+            base = {
+                "review_id": record.review_id,
+                "product_id": record.product_id,
+                "review_text": record.review_text,
+                "extraction_status": record.extraction_status,
+            }
+
+            if not record.aspects:
+                rows.append({
+                    **base,
+                    "aspect_id": None,
+                    "aspect_term": None,
+                    "sentiment": None,
+                    "evidence": None,
+                    "complaint_present": None,
+                    "complaint_evidence": None,
+                })
+            else:
+                for aspect in record.aspects:
+                    rows.append({
+                        **base,
+                        "aspect_id": aspect.aspect_id,
+                        "aspect_term": aspect.aspect_term,
+                        "sentiment": aspect.sentiment,
+                        "evidence": aspect.evidence,
+                        "complaint_present": aspect.complaint_present,
+                        "complaint_evidence": aspect.complaint_evidence,
+                    })
+
+    csv_path.parent.mkdir(parents=True, exist_ok=True)
+    pd.DataFrame(rows, columns=columns).to_csv(csv_path, index=False)
+    return csv_path
+
 def preflight():
     """Validate local inputs and pilot selection without creating an API client."""
     if not DATASET.is_file():
@@ -240,6 +303,7 @@ def run(limit=10, pilot=True, *, full=False, client=None, dataset=None, out_dir=
     elapsed = round(time.time() - started, 2)
     done_now = completed_ids(paths, source_by_id)
     outstanding = sorted(set(source_by_id) - done_now)
+    csv_out = export_predictions_csv(out, out.with_suffix(".csv"))
     manifest = {"mode": stem, "started_at_utc": started_iso, "model": MODEL,
         "prompt_version": (
     PROMPT_FILES[strategy] if strategy else PROMPT_VERSION
@@ -261,6 +325,7 @@ def run(limit=10, pilot=True, *, full=False, client=None, dataset=None, out_dir=
         "average_latency_seconds": round(elapsed/len(todo), 2) if len(todo) else None,
         "workers": workers,
         "output_jsonl": str(out.relative_to(PROJECT_ROOT)) if out.is_relative_to(PROJECT_ROOT) else str(out),
+        "output_csv": str(csv_out.relative_to(PROJECT_ROOT)) if csv_out.is_relative_to(PROJECT_ROOT) else str(csv_out),
         "failure_jsonl": str(failures.relative_to(PROJECT_ROOT)) if failures.is_relative_to(PROJECT_ROOT) else str(failures)}
     reports_dir.mkdir(parents=True, exist_ok=True)
     (reports_dir / f"{stem}_run_manifest.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")

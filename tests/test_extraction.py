@@ -122,3 +122,33 @@ def test_jsonl_writer_uses_real_newline(tmp_path):
     append_jsonl(target, {"review_id": "R2"})
     lines = target.read_text(encoding="utf-8").splitlines()
     assert [json.loads(line)["review_id"] for line in lines] == ["R1", "R2"]
+
+
+def test_json_recovery_from_markdown_fence():
+    from src.extraction.json_utils import extract_json_object
+
+    result = extract_json_object('```json\n{"review_id":"R1"}\n```')
+    assert result == {"review_id": "R1"}
+
+
+def test_json_recovery_with_surrounding_text():
+    from src.extraction.json_utils import extract_json_object
+
+    result = extract_json_object(
+        'Here is the result:\n{"review_id":"R1","text":"value"}\nDone.'
+    )
+    assert result == {"review_id": "R1", "text": "value"}
+
+
+def test_json_recovery_handles_braces_inside_strings():
+    from src.extraction.json_utils import extract_json_object
+
+    result = extract_json_object('{"review_text":"battery {issue}"}')
+    assert result["review_text"] == "battery {issue}"
+
+
+def test_json_recovery_rejects_malformed_json():
+    from src.extraction.json_utils import extract_json_object
+
+    with pytest.raises(ValueError, match="malformed"):
+        extract_json_object('{"review_id":}')
