@@ -1,0 +1,42 @@
+# Secrets and environment
+.env
+.env.*
+!.env.example
+.streamlit/secrets.toml
+
+# Python environments and caches
+.venv/
+venv/
+__pycache__/
+.pytest_cache/
+*.py[cod]
+*.egg-info/
+.pyright/
+.mypy_cache/
+
+# Editors and operating systems
+.vscode/
+.idea/
+.DS_Store
+
+# Backups
+*.bak
+*.backup
+*~
+
+# Local datasets, annotations, predictions and analysis outputs
+data/
+
+# Generated reports (Markdown reports remain eligible for review)
+reports/*.json
+reports/*.jsonl
+reports/*.csv
+reports/*.png
+reports/*.jpg
+reports/*.jpeg
+
+# Logs
+*.log
+
+# Local pilot review contains customer review text
+reports/pilot_review.md
