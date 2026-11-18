@@ -1,4 +1,4 @@
-# Member 2 — final offline handover status
+# Member 2 — handover and annotation status (18 November 2026)
 
 ## Offline work completed
 
@@ -11,6 +11,8 @@
 - Added offline extraction tests and completed the README setup/run/handover instructions.
 - Corrected JSONL newline writing and ensured semantic retry exhaustion is logged with
   its actual category and attempt count.
+- The approved 10-review run used `absa_extraction_v1`; its approval does not authorize
+  a claim that full-dataset extraction is complete.
 
 ## Dataset and preservation checks
 
@@ -26,25 +28,36 @@
 
 ## Offline verification results
 
-- `python -m pytest -q tests/test_extraction.py`: **15 passed**.
-- `python -m src.extraction.pipeline --preflight` with `OPENAI_API_KEY` unset:
-  **passed**, fixed 10-review cohort confirmed, `api_call_made: false`.
-- `python -m compileall -q src/extraction tests/test_extraction.py`: passed.
-- Full `python -m pytest -q` collection is blocked in this execution environment
-  because `lingua-language-detector` is not installed. Package installation was
-  attempted, but this environment has no package-index network access. The preserved
-  preprocessing files were not changed. On the user's machine, install all entries
-  in `requirements.txt` and rerun the full test command in the README.
-- The OpenAI SDK is also not installed in this execution environment; the adapter
-  imports it lazily. It is declared in `requirements.txt`. No API request was made.
+- The approved 10-review pilot manifest records 10 successes, zero failures, and
+  zero outstanding pilot IDs; the pilot was manually reviewed and approved as
+  recorded in `reports/pilot_approval.json`.
+- The development annotation file contains 20 records: 5 complete and 15 todo.
+  `validate_dev_annotations.py` currently reports those 15 incomplete records, so
+  its audit is **not passed**.
+- The human evaluation file contains 300 records: 1 complete and 299 todo. No
+  evaluation metrics can be claimed from this incomplete set.
+- `data/evaluation/ai_annotations.jsonl` contains 63 AI-generated silver records.
+  The 300-record run manifest reports 26 successes and 274 failures; the separate
+  recovery manifest reports 10 recovered records. These are not human annotations
+  or gold labels.
+- `git diff --check` passed. The full suite passed in the repository virtual
+  environment: `.venv/bin/python -m pytest -q` — **106 passed**. Bare
+  `python -m pytest -q` resolved to a separate Python 3.11 installation without
+  Streamlit and Lingua and failed during collection; activate `.venv` before
+  using the README test command.
 
-## API-dependent steps still pending
+## Extraction and evaluation still pending
 
-1. Configure the local `.env` in the user's environment and ensure API billing/access.
-2. Confirm the account can use `gpt-6-luna`.
-3. Run the fixed 10-review pilot using `python -m src.extraction.pipeline`.
-4. Review actual model outputs and failures before handing predictions to Members 3/4.
+1. Complete and validate the remaining development and human evaluation
+  annotations; keep evaluation IDs disjoint from development and pilot IDs.
+2. Full-dataset extraction has not been run. If it is required, review the existing
+  pilot's documented issues, confirm account access to `gpt-6-luna`, and follow
+  the approval-gated pipeline workflow.
+3. Do not calculate or report evaluation metrics until the human gold annotations
+  are complete. Keep AI silver records separate from ground truth.
+4. Real-model summaries/judge remain unverified in the current handover artifacts.
 
-No model predictions, token usage, latency or API costs are claimed. Full-dataset
-extraction is disabled. Human annotation/evaluation remains Member 3's work; frontend
-integration remains Member 4's work.
+The pilot does have model predictions, token usage, estimated cost, and latency
+recorded in its manifest; these figures apply only to that pilot. No full-dataset
+extraction or human-gold evaluation metrics are claimed. Human annotation/evaluation
+remains Member 3's work; frontend integration remains Member 4's work.

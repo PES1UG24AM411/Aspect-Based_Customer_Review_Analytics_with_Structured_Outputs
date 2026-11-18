@@ -153,6 +153,24 @@ the script runs.
 
 # Stages 2-7: extraction, evaluation, analysis, summaries, UI
 
+## Current handover status (18 November 2026)
+
+- The processed dataset contains 1,082 English reviews. The fixed 10-review pilot
+  completed with 10 schema-valid records and no logged failures; it was manually
+  reviewed and approved for `absa_extraction_v1`. This approval is tied to that
+  prompt, model, schema, and dataset hash.
+- Full-dataset extraction has **not** been run. The pilot approval does not mean
+  the remaining reviews have been extracted.
+- The development split has 20 records, of which 5 are marked complete and 15
+  remain todo. The 300-record human evaluation file has 1 complete record and
+  299 todo. Human evaluation metrics are therefore not available.
+- `data/evaluation/ai_annotations.jsonl` contains AI-generated silver annotations,
+  not human gold labels. Its run and recovery manifests are separate from the
+  approved 10-review extraction pilot. Do not use silver annotations as gold.
+- See [reports/handover_status.md](reports/handover_status.md) and
+  [reports/member2_completion_status.md](reports/member2_completion_status.md)
+  for current validation details and remaining work.
+
 ## Pipeline at a glance
 
 ```
@@ -201,8 +219,10 @@ the manifest shows `"complete": true`.
 ## Stage C - evaluation (requires human gold labels)
 
 1. `data/evaluation/splits.json` holds the deterministic dev/eval split (seed 42; eval is disjoint from dev and pilot).
-2. Annotate `data/evaluation/gold_annotations_template.jsonl` per `docs/annotation_guidelines.md`, save as
-   `data/evaluation/gold_annotations.jsonl`.
+2. The current evaluation template contains 300 eval reviews. Complete the human
+  annotations in `data/evaluation/gold_annotations.jsonl` per
+  `docs/annotation_guidelines.md`; do not substitute model output or the silver
+  annotation file for human labels.
 3. `python -m src.evaluation.run_eval [--mode strict|lenient]`
 
 Outputs in `reports/evaluation/`: `evaluation_metrics.json`, `evaluation_report.md`, `error_analysis.csv`, confusion-matrix PNGs.
@@ -229,7 +249,8 @@ The judge is a consistency check, **not** ground truth and not a substitute for 
 auth failure, missing key, evaluation metrics, aggregation, summaries, and every Streamlit page.
 
 ## Limitations
-- No LLM predictions or evaluation metrics are included in this repository until you run Stages A-C with a valid key and gold labels.
+- Only the approved 10-review pilot has been run through the extraction pipeline; full-dataset extraction and human-gold evaluation remain incomplete.
+- AI-generated silver annotation files and run manifests may exist locally, but they are not human ground truth and do not support accuracy/F1 claims.
 - The mock extractor (`src/extraction/mock_client.py`) exists for tests/UI previews only.
 - Aspect normalisation is heuristic; lenient matching is a convention, so report the mode used.
 - Cost estimates in manifests use the prices in `src/extraction/config.py`; verify them.

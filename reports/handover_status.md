@@ -1,16 +1,45 @@
-# Status after continuation work
+# Project handover status — 18 November 2026
 
-## Verified in this environment
-- Existing 59 tests still pass; total suite now 92 tests, all passing (offline).
-- Every Streamlit page renders with and without data (AppTest).
-- End-to-end workflow (pilot -> approve -> full -> aggregate -> summaries -> evaluation) runs against a fake client in temp dirs.
+## Verified project state
 
-## NOT done (needs things only you have)
-- Stage A real pilot: no OPENAI_API_KEY and no access to the OpenAI API from this environment. `data/extracted/` is empty. No predictions, token usage, cost or latency exist.
-- The configured model ID was not verified against any API account.
-- Stage B full extraction: blocked by design until `reports/pilot_approval.json` exists.
-- Stage C: no human gold labels exist, so no accuracy/F1 is claimed. A blank 100-review template and dev/eval split are provided.
-- Stage E LLM summaries/judge: code and tests done; not run against a real model.
+- The processed dataset has 1,082 English reviews and SHA-256
+	`1f669b4d3085cc69d525e70d53cc159cffb1c62f3fba009ec74afadaf75e380d`.
+- The fixed 10-review extraction pilot completed: 10 successes, zero failures,
+	zero outstanding pilot IDs. Its manifest is `reports/pilot_run_manifest.json`.
+- The pilot outputs were manually reviewed and approved by Tasya for
+	`absa_extraction_v1`; approval is recorded in `reports/pilot_approval.json`.
+	The recorded review notes identify sentiment and aspect-granularity issues.
+- Full-dataset extraction has not been run. The only extraction output in
+	`data/extracted/` is the 10-record pilot; no full-run manifest or full-run
+	predictions are present.
+- The fixed development set has 20 records: 5 complete and 15 todo. The current
+	300-record human evaluation file has 1 complete record and 299 todo. The local
+	development validator reports 15 incomplete-record errors; this is unfinished
+	annotation, not a passing audit.
+- The local AI annotation JSONL has 63 records. They are AI-generated silver
+	annotations, not human gold. The 300-record AI run manifest reports 26
+	successes and 274 failures; a separate recovery manifest reports 10 recovered.
+	Neither result is a human evaluation set or a basis for accuracy/F1.
+- No human-gold evaluation metrics are available. LLM summaries/judge have not
+	been verified against a real-model run in the current handover artifacts.
 
-## Code fix
-- pipeline.py contained an unreachable duplicate `except Exception` block; replaced by a single retry helper.
+## Remaining work
+
+1. Complete and validate the development annotations and 300-review human gold
+	 evaluation annotations; retain the dev/eval separation in
+	 `data/evaluation/splits.json`.
+2. If full extraction is required, review the approved pilot and its known issues,
+	 confirm the API project and model access, then run and verify the full pipeline.
+3. Run evaluation only after the human gold set is complete; report its scoring
+	 mode and do not treat AI silver annotations as ground truth.
+4. Record any later real-model summary/judge run separately from offline tests.
+
+## Validation note
+
+`git diff --check` passed, and the full suite passed with the repository
+environment (`.venv/bin/python -m pytest -q`: 106 passed). The shell's bare
+`python -m pytest -q` resolved to a separate Python 3.11 installation without
+Streamlit and Lingua, so collection failed there; use the activated project
+environment for the documented command. Annotation status was checked from the
+local JSONL files and manifests; the development annotation validator does not
+pass until the remaining 15 records are completed.
