@@ -2,13 +2,13 @@
 """OpenAI Responses API adapter. Requires OPENAI_API_KEY in project .env."""
 from pathlib import Path
 from pydantic import ValidationError
-from .config import MODEL, PROJECT_ROOT
+from .config import MODEL, PROJECT_ROOT, PROMPT_VERSION
 from .schemas import ExtractionRecord
 from .validators import validate_record
 from .retry_handler import ExtractionFailure
 from .prompt_strategies import load_prompt
 
-PROMPT = (PROJECT_ROOT / "prompts" / "absa_extraction_v1.txt").read_text(encoding="utf-8")
+PROMPT = (PROJECT_ROOT / "prompts" / f"{PROMPT_VERSION}.txt").read_text(encoding="utf-8")
 
 
 def extract_one(
@@ -29,6 +29,12 @@ def extract_one(
 
     feedback = ""
     last_error = None
+    usage_totals = {
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "total_tokens": 0,
+    }
+    usage_seen = False
 
     for attempt in range(1, max_semantic_attempts + 1):
         user_input = (
@@ -44,6 +50,14 @@ def extract_one(
                 input=user_input,
                 text_format=ExtractionRecord
             )
+            usage = getattr(response, "usage", None)
+            if usage:
+                usage_seen = True
+                for key in usage_totals:
+                    value = getattr(usage, key, None)
+                    if isinstance(value, int):
+                        usage_totals[key] += value
+
             parsed = response.output_parsed
 
             if parsed is None:
@@ -59,17 +73,7 @@ def extract_one(
                 expected_review_text=str(row["review_text"])
             )
 
-            usage = getattr(response, "usage", None)
-            usage_data = None
-
-            if usage:
-                usage_data = {
-                    "input_tokens": getattr(usage, "input_tokens", None),
-                    "output_tokens": getattr(usage, "output_tokens", None),
-                    "total_tokens": getattr(usage, "total_tokens", None)
-                }
-
-            return parsed, usage_data
+            return parsed, usage_totals if usage_seen else None
 
         except Exception as exc:
             name = type(exc).__name__

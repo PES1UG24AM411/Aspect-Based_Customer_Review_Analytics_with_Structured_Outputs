@@ -87,8 +87,10 @@ def export_predictions_csv(jsonl_path, csv_path):
     pd.DataFrame(rows, columns=columns).to_csv(csv_path, index=False)
     return csv_path
 
-def preflight():
+def preflight(limit=10, reports_dir=None):
     """Validate local inputs and pilot selection without creating an API client."""
+    if not 1 <= limit <= 10:
+        raise SystemExit("Pilot limit must be between 1 and 10 reviews.")
     if not DATASET.is_file():
         raise SystemExit(f"Processed dataset not found: {DATASET}")
     df = pd.read_csv(DATASET)
@@ -99,10 +101,10 @@ def preflight():
     english = df[df.language.astype(str).str.casefold().eq("english")].copy()
     english = english.dropna(subset=["review_id", "product_id", "review_text"])
     english = english[english.review_text.astype(str).str.strip().ne("")]
-    selected = english.head(10)
-    if len(selected) != min(10, len(english)):
-        raise SystemExit("Unable to select the expected 10-review pilot")
-    prompt_path = PROJECT_ROOT / "prompts" / "absa_extraction_v1.txt"
+    selected = english.head(limit)
+    if len(selected) != min(limit, len(english)):
+        raise SystemExit(f"Unable to select the expected {limit}-review pilot")
+    prompt_path = PROJECT_ROOT / "prompts" / f"{PROMPT_VERSION}.txt"
     if not prompt_path.is_file() or not prompt_path.read_text(encoding="utf-8").strip():
         raise SystemExit(f"Versioned prompt missing or empty: {prompt_path}")
     result = {
@@ -113,12 +115,14 @@ def preflight():
         "dataset_sha256": sha256(DATASET),
         "english_rows_available": int(len(english)),
         "pilot_size": int(len(selected)),
+        "requested_limit": limit,
         "pilot_review_ids": selected.review_id.astype(str).tolist(),
         "prompt_version": PROMPT_VERSION,
         "schema_version": SCHEMA_VERSION,
         "model_configured": MODEL,
     }
-    manifest_path = PROJECT_ROOT / "reports" / "offline_preflight_manifest.json"
+    report_path = Path(reports_dir) if reports_dir else PROJECT_ROOT / "reports"
+    manifest_path = report_path / "offline_preflight_manifest.json"
     manifest_path.parent.mkdir(parents=True, exist_ok=True)
     manifest_path.write_text(json.dumps(result, indent=2), encoding="utf-8")
     print(json.dumps(result, indent=2))
@@ -242,8 +246,8 @@ def run(limit=10, pilot=True, *, full=False, client=None, dataset=None, out_dir=
     reports_dir = base_reports_dir / strategy if strategy is not None else base_reports_dir
     if full:
         pilot = False
-    elif not pilot or limit != 10:
-        raise SystemExit("Pilot mode is fixed to exactly 10 reviews; use --full after pilot approval.")
+    elif not pilot or not 1 <= limit <= 10:
+        raise SystemExit("Pilot limit must be between 1 and 10 reviews; use --full after pilot approval.")
     if require_key and client is None and not API_KEY_PRESENT:
         raise SystemExit("OPENAI_API_KEY missing. Add it to .env; no API call was made.")
     if full:
@@ -256,7 +260,7 @@ def run(limit=10, pilot=True, *, full=False, client=None, dataset=None, out_dir=
         )
 
     df = english_eligible(dataset)
-    cohort = df.head(10).copy() if pilot else df.copy()
+    cohort = df.head(limit).copy() if pilot else df.copy()
     stem = "pilot" if pilot else "full"
     out = out_dir / ("pilot_predictions.jsonl" if pilot else "predictions.jsonl")
     failures = out_dir / ("pilot_failures.jsonl" if pilot else "failures.jsonl")
@@ -335,13 +339,15 @@ def run(limit=10, pilot=True, *, full=False, client=None, dataset=None, out_dir=
 
 if __name__=="__main__":
     ap=argparse.ArgumentParser(description="ABSA extraction: pilot by default; --full only after pilot approval")
-    ap.add_argument("--limit",type=int,default=10)
+    ap.add_argument("--limit", type=int, default=10)
+    ap.add_argument("--out-dir", default="data/ai_annotation_pilot_5")
+    ap.add_argument("--reports-dir", default="reports/ai_annotation_pilot_5")
     ap.add_argument("--preflight",action="store_true",help="Validate local setup without making API calls")
     ap.add_argument("--full",action="store_true",help="Process all remaining English reviews (requires reports/pilot_approval.json)")
     ap.add_argument("--workers",type=int,default=1,help="Parallel requests for --full")
     ap.add_argument(
     "--strategy",
-    choices=["zero_shot", "few_shot", "cot"],
+    choices=["zero_shot", "few_shot", "few_shot_v2", "cot"],
     default=None,
     help="Prompt strategy; default uses the original baseline prompt"
 )
@@ -358,7 +364,7 @@ if __name__=="__main__":
             raise SystemExit(str(exc))
 
     if args.preflight:
-        preflight()
+        preflight(limit=args.limit, reports_dir=args.reports_dir)
         raise SystemExit(0)
     if args.approve_pilot:
         from .approval import approve_pilot
@@ -368,8 +374,8 @@ if __name__=="__main__":
         run(full=True, workers=max(1, args.workers), strategy=args.strategy)
         raise SystemExit(0)
 
-    if args.limit != 10:
-        print("Pilot mode is fixed to exactly 10 reviews.")
+    if not 1 <= args.limit <= 10:
+        print("Pilot limit must be between 1 and 10 reviews.")
         raise SystemExit(2)
 
-    run(limit=10, pilot=True, strategy=args.strategy)
+    run(limit=args.limit, pilot=True, strategy=args.strategy, out_dir=args.out_dir, reports_dir=args.reports_dir)

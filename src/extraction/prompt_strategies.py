@@ -6,6 +6,7 @@ from .config import PROJECT_ROOT
 PROMPT_FILES = {
     "zero_shot": "absa_zero_shot_v1.txt",
     "few_shot": "absa_few_shot_v1.txt",
+    "few_shot_v2": "absa_few_shot_v2_candidate.txt",
     "cot": "absa_cot_v1.txt",
 }
 

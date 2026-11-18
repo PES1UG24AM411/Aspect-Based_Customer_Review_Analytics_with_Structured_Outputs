@@ -180,14 +180,43 @@ elif page == "Evaluation":
         horizontal=True,
     )
 
+    shared_review_ids = set()
+
     if annotation_mode == "Development (20 reviews)":
         template_path = ROOT / "data/evaluation/dev_annotations_template.jsonl"
         gold_path = ROOT / "data/evaluation/dev_annotations.jsonl"
         dataset_key = "dev"
     else:
+        assignment_path = ROOT / "data/evaluation/annotation_assignment.json"
+
+        if not assignment_path.is_file():
+            st.error("Annotation assignment file not found.")
+            st.stop()
+
+        assignment = json.loads(assignment_path.read_text(encoding="utf-8"))
+
+        workspace = st.selectbox(
+            "Evaluation annotator workspace",
+            ["Annotator 1", "Annotator 2"],
+            key="evaluation_annotator_workspace",
+        )
+
+        slot = "1" if workspace == "Annotator 1" else "2"
+        expected_filename = f"annotator_{slot}.jsonl"
+        assigned_filename = assignment.get(f"annotator_{slot}_file")
+
+        if assigned_filename != expected_filename:
+            st.error("Annotation assignment filename does not match the expected file.")
+            st.stop()
+
         template_path = ROOT / "data/evaluation/gold_annotations_template.jsonl"
-        gold_path = ROOT / "data/evaluation/gold_annotations.jsonl"
-        dataset_key = "eval"
+        gold_path = ROOT / "data/evaluation" / expected_filename
+        dataset_key = f"eval_annotator_{slot}"
+        shared_review_ids = set(assignment.get("shared_review_ids", []))
+
+        if not gold_path.is_file():
+            st.error(f"Independent annotation file not found: {gold_path}")
+            st.stop()
 
     if not template_path.exists():
         st.error(f"Annotation template not found: {template_path}")
@@ -244,6 +273,18 @@ elif page == "Evaluation":
     record = records[st.session_state[index_key]]
 
     st.subheader(f"Review {record['review_id']}")
+
+    if dataset_key.startswith("eval_annotator_"):
+        if record["review_id"] in shared_review_ids:
+            st.info(
+                "Shared double-annotation sample: both annotators must "
+                "independently annotate this review."
+            )
+        else:
+            st.caption(
+                "Outside the 30-review shared agreement sample."
+            )
+
     st.caption(f"Product ID: {record['product_id']}")
     st.info(record["review_text"])
 
@@ -258,27 +299,47 @@ elif page == "Evaluation":
         "Add one entry per distinct aspect. Evidence must be copied exactly from the review."
     )
 
+
     aspects = record.get("aspects", [])
-        # AI-assisted suggestions from existing predictions (development only).
-    if dataset_key == "dev":
-        prediction_path = ROOT / "data/extracted/pilot_predictions.jsonl"
+
+    # Keep AI suggestions in an unsaved session draft.
+    pending_key = (
+        f"{dataset_key}_{record['review_id']}_pending_ai_aspects"
+    )
+
+    if pending_key in st.session_state:
+        aspects = [
+            dict(item) for item in st.session_state[pending_key]
+        ]
+
+    # AI suggestions are available only for unfinished development reviews.
+    if dataset_key == "dev" and record.get("status") != "complete":
         predictions = {}
 
-        if prediction_path.exists():
-            with prediction_path.open(encoding="utf-8") as f:
-                predictions = {
-                    row["review_id"]: row
-                    for line in f if line.strip()
-                    for row in [json.loads(line)]
-                }
+        prediction_paths = [
+            ROOT / "data/extracted/pilot_predictions.jsonl",
+            ROOT / "data/ai_annotation_pilot_5_v3/pilot_predictions.jsonl",
+        ]
+
+        # Load older predictions first; refined v3 takes priority.
+        for prediction_path in prediction_paths:
+            if prediction_path.exists():
+                with prediction_path.open(encoding="utf-8") as f:
+                    for line in f:
+                        if line.strip():
+                            row = json.loads(line)
+                            predictions[row["review_id"]] = row
 
         prediction = predictions.get(record["review_id"])
 
         if prediction and prediction.get("extraction_status") == "success":
-            st.info("AI suggestions are available from existing predictions.")
+            st.warning(
+                "AI-generated suggestions: review and correct every "
+                "aspect before saving. These are NOT human gold labels."
+            )
 
             if st.button(
-                "✨ Use AI suggestions (replace current draft)",
+                "✨ Load AI suggestions into draft (not saved)",
                 key=f"ai_suggest_{record['review_id']}",
                 use_container_width=True,
             ):
@@ -288,8 +349,10 @@ elif page == "Evaluation":
                     evidence = item.get("evidence", "")
 
                     if (
-                        evidence in record["review_text"]
-                        and item.get("sentiment") in ["positive", "negative", "neutral"]
+                        evidence
+                        and evidence in record["review_text"]
+                        and item.get("sentiment")
+                        in ["positive", "negative", "neutral"]
                         and item.get("aspect_term")
                     ):
                         suggested.append({
@@ -302,33 +365,25 @@ elif page == "Evaluation":
                         })
 
                 if suggested:
-                    record["aspects"] = suggested
-                    records[st.session_state[index_key]] = record
+                    st.session_state[pending_key] = suggested
 
-                    gold_path.write_text(
-                        "\n".join(
-                            json.dumps(r, ensure_ascii=False) for r in records
-                        ) + "\n",
-                        encoding="utf-8",
+                    # Clear the actual widget keys for this review.
+                    prefix = (
+                        f"{dataset_key}_{record['review_id']}_aspect_"
                     )
 
-                    # Clear stale widget values so the new suggestions display.
                     for key in list(st.session_state.keys()):
-                        if key.startswith((
-                            f"{dataset_key}_term_{record['review_id']}_",
-                            f"{dataset_key}_sentiment_{record['review_id']}_",
-                            f"{dataset_key}_evidence_{record['review_id']}_",
-                            f"{dataset_key}_complaint_{record['review_id']}_",
-                        )):
+                        if key.startswith(prefix):
                             del st.session_state[key]
+
+                    st.rerun()
                 else:
                     st.warning("No valid AI suggestions found.")
 
     for i, aspect in enumerate(aspects):
+        # Stable, unique widget keys: one set per aspect position.
         aspect_key = (
-            f"{dataset_key}_{record['review_id']}_"
-            f"{aspect.get('aspect_term', '')}_"
-            f"{aspect.get('evidence', '')}"
+            f"{dataset_key}_{record['review_id']}_aspect_{i}"
         )
         with st.expander(
             f"Aspect {i + 1}: {aspect.get('aspect_term', '')}",
@@ -363,6 +418,12 @@ elif page == "Evaluation":
                 key=f"{dataset_key}_remove_{record['review_id']}_{i}",
             ):
                 aspects.pop(i)
+
+                if pending_key in st.session_state:
+                    st.session_state[pending_key] = [
+                        dict(item) for item in aspects
+                    ]
+
                 record["aspects"] = aspects
                 records[st.session_state[index_key]] = record
 
@@ -373,22 +434,16 @@ elif page == "Evaluation":
                     encoding="utf-8",
                 )
 
-                # Clear stale values after removing an aspect.
-                prefixes = (
-                    f"{dataset_key}_term_{record['review_id']}_",
-                    f"{dataset_key}_sentiment_{record['review_id']}_",
-                    f"{dataset_key}_evidence_{record['review_id']}_",
-                    f"{dataset_key}_complaint_{record['review_id']}_",
-                )
-
-                for key in list(st.session_state.keys()):
-                    if key.startswith(prefixes):
-                        del st.session_state[key]
-
                 st.rerun()
+
 
     record["aspects"] = aspects
     record["annotator"] = annotator
+
+    if pending_key in st.session_state:
+        st.session_state[pending_key] = [
+            dict(item) for item in aspects
+        ]
 
     record["notes"] = st.text_area(
         "Annotation notes (optional)",
@@ -413,7 +468,14 @@ elif page == "Evaluation":
                 "evidence": "",
                 "complaint_present": False,
             })
+
             record["aspects"] = aspects
+
+            if pending_key in st.session_state:
+                st.session_state[pending_key] = [
+                    dict(item) for item in aspects
+                ]
+
             save_annotations()
             st.rerun()
 
