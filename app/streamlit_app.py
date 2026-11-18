@@ -170,17 +170,20 @@ elif page == "Summaries":
 elif page == "Evaluation":
     import json
     from src.evaluation.schemas import GoldRecord
+    from src.evaluation.sampling import select_human_evaluation_ids
 
     st.header("Human annotation & evaluation")
 
     # Keep development and evaluation annotations in separate files.
     annotation_mode = st.radio(
         "Annotation dataset",
-        ["Development (20 reviews)", "Evaluation (300 reviews)"],
+        ["Development (20 reviews)", "Evaluation (15-review target)"],
         horizontal=True,
     )
 
     shared_review_ids = set()
+    stored_records = []
+    evaluation_ids = []
 
     if annotation_mode == "Development (20 reviews)":
         template_path = ROOT / "data/evaluation/dev_annotations_template.jsonl"
@@ -194,6 +197,16 @@ elif page == "Evaluation":
             st.stop()
 
         assignment = json.loads(assignment_path.read_text(encoding="utf-8"))
+        splits_path = ROOT / "data/evaluation/splits.json"
+        if not splits_path.is_file():
+            st.error("Evaluation split file not found.")
+            st.stop()
+        splits = json.loads(splits_path.read_text(encoding="utf-8"))
+        try:
+            evaluation_ids = select_human_evaluation_ids(splits, assignment)
+        except ValueError as exc:
+            st.error(f"Cannot determine the approved human evaluation sample: {exc}")
+            st.stop()
 
         workspace = st.selectbox(
             "Evaluation annotator workspace",
@@ -233,9 +246,54 @@ elif page == "Evaluation":
         st.warning("No reviews available for annotation.")
         st.stop()
 
+    stored_records = records
+    if dataset_key.startswith("eval_annotator_"):
+        records_by_id = {record["review_id"]: record for record in stored_records}
+        missing_ids = [review_id for review_id in evaluation_ids if review_id not in records_by_id]
+        if missing_ids:
+            st.error(
+                "The existing annotator workspace is missing selected review IDs: "
+                + ", ".join(missing_ids)
+            )
+            st.stop()
+        source_rows = reviews[reviews.review_id.astype(str).isin(evaluation_ids)]
+        source_by_id = {
+            str(row.review_id): row
+            for row in source_rows.itertuples(index=False)
+        }
+        mismatched_ids = [
+            review_id
+            for review_id in evaluation_ids
+            if review_id not in source_by_id
+            or str(records_by_id[review_id].get("product_id"))
+            != str(source_by_id[review_id].product_id)
+            or records_by_id[review_id].get("review_text")
+            != str(source_by_id[review_id].review_text)
+            or str(source_by_id[review_id].language).casefold() != "english"
+        ]
+        if mismatched_ids:
+            st.error(
+                "Selected annotation records do not match the processed dataset: "
+                + ", ".join(mismatched_ids)
+            )
+            st.stop()
+        records = [records_by_id[review_id] for review_id in evaluation_ids]
+
     completed = sum(r.get("status") == "complete" for r in records)
     st.progress(completed / len(records))
-    st.caption(f"{completed} / {len(records)} reviews completed")
+    if dataset_key.startswith("eval_annotator_"):
+        st.metric("Human evaluation target", f"15 unique reviews")
+        st.caption(
+            f"{completed} / 15 selected reviews completed in the {workspace} workspace. "
+            "Both existing annotator workspaces independently cover this same shared subset."
+        )
+        st.info(
+            "The evaluation subset is the first 15 IDs in the existing shared-review "
+            "assignment. Those IDs come from the reproducible seed-42 evaluation split; "
+            "the original 300-record split and annotation files are retained."
+        )
+    else:
+        st.caption(f"{completed} / {len(records)} reviews completed")
 
     index_key = f"{dataset_key}_annotation_index"
     if index_key not in st.session_state:
@@ -282,7 +340,7 @@ elif page == "Evaluation":
             )
         else:
             st.caption(
-                "Outside the 30-review shared agreement sample."
+                "Outside the selected shared evaluation sample."
             )
 
     st.caption(f"Product ID: {record['product_id']}")
@@ -429,7 +487,7 @@ elif page == "Evaluation":
 
                 gold_path.write_text(
                     "\n".join(
-                        json.dumps(r, ensure_ascii=False) for r in records
+                        json.dumps(r, ensure_ascii=False) for r in stored_records
                     ) + "\n",
                     encoding="utf-8",
                 )
@@ -452,9 +510,10 @@ elif page == "Evaluation":
     )
 
     def save_annotations():
-        records[st.session_state[index_key]] = record
+        stored_by_id = {item["review_id"]: item for item in stored_records}
+        stored_by_id[record["review_id"]].update(record)
         gold_path.write_text(
-            "\n".join(json.dumps(r, ensure_ascii=False) for r in records) + "\n",
+            "\n".join(json.dumps(r, ensure_ascii=False) for r in stored_records) + "\n",
             encoding="utf-8",
         )
 

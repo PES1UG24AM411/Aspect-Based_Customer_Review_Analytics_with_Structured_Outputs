@@ -58,6 +58,28 @@ def test_full_after_approval_skips_pilot_and_no_duplicates(env):
     assert m2["processed_this_run"] == 0 and m2["skipped_already_completed"] == 14
 
 
+def test_prompt_strategy_requires_its_own_matching_pilot_approval(env):
+    pipeline.run(strategy="zero_shot", **env)
+    strategy_reports = env["reports_dir"] / "zero_shot"
+    strategy_output = env["out_dir"] / "zero_shot"
+
+    with pytest.raises(SystemExit, match="no pilot approval"):
+        pipeline.run(full=True, strategy="zero_shot", **env)
+
+    approval = approve_pilot(
+        reviewer="tester",
+        reports_dir=strategy_reports,
+        out_dir=strategy_output,
+        dataset=env["dataset"],
+        strategy="zero_shot",
+    )
+    assert approval["prompt_version"] == "absa_zero_shot_v1.txt"
+
+    result = pipeline.run(full=True, strategy="zero_shot", **env)
+    assert result["complete"]
+    assert result["completed_total"] == 14
+
+
 def test_stale_approval_rejected(env):
     pipeline.run(**env)
     approve_pilot(reviewer="t", reports_dir=env["reports_dir"], out_dir=env["out_dir"], dataset=env["dataset"])

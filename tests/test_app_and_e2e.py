@@ -52,6 +52,24 @@ def test_real_predictions_take_priority_over_mock(tmp_path, monkeypatch):
     assert source == "model predictions"
 
 
+def test_evaluation_ui_shows_fifteen_review_target_and_independent_progress():
+    at = AppTest.from_file(APP, default_timeout=90).run()
+    at.sidebar.radio[0].set_value("Evaluation").run()
+    at.radio[0].set_value("Evaluation (15-review target)").run()
+
+    assert not at.exception
+    assert any(
+        metric.label == "Human evaluation target" and metric.value == "15 unique reviews"
+        for metric in at.metric
+    )
+    assert any("0 / 15 selected reviews completed" in caption.value for caption in at.caption)
+    assert any("Review 1 of 15" in item.value for item in at.markdown)
+
+    at.selectbox[0].set_value("Annotator 2").run()
+    assert not at.exception
+    assert any("annotator_2.jsonl" in caption.value for caption in at.caption)
+
+
 def test_end_to_end_workflow_offline(tmp_path):
     """preprocess output -> pilot -> approve -> full -> aggregate -> summaries -> evaluation (mock client, tmp dirs)."""
     from src.extraction.config import PROJECT_ROOT

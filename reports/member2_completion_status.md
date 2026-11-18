@@ -34,30 +34,55 @@
 - The development annotation file contains 20 records: 5 complete and 15 todo.
   `validate_dev_annotations.py` currently reports those 15 incomplete records, so
   its audit is **not passed**.
-- The human evaluation file contains 300 records: 1 complete and 299 todo. No
-  evaluation metrics can be claimed from this incomplete set.
+- The guide-approved target is 15 unique reviews, selected as the first 15 IDs
+  from the existing 30-ID shared assignment in the seed-42 evaluation split.
+  Current selected completion is 0/15 in each independent annotator workspace
+  and 1/15 in the retained consolidated human-gold file. The original 300-row
+  files are preserved; no evaluation metrics can be claimed yet.
 - `data/evaluation/ai_annotations.jsonl` contains 63 AI-generated silver records.
   The 300-record run manifest reports 26 successes and 274 failures; the separate
   recovery manifest reports 10 recovered records. These are not human annotations
   or gold labels.
-- `git diff --check` passed. The full suite passed in the repository virtual
-  environment: `.venv/bin/python -m pytest -q` — **106 passed**. Bare
-  `python -m pytest -q` resolved to a separate Python 3.11 installation without
-  Streamlit and Lingua and failed during collection; activate `.venv` before
-  using the README test command.
+- `git diff --check` passed. The focused approval/evaluation/agreement/Streamlit/strategy
+  tests passed (41 tests), and the complete suite passed in the activated
+  repository environment (`python -m pytest -q`) — **112 passed**. No API calls
+  were made.
+
+## Revised human evaluation requirement
+
+- The comparison target is 15 unique human-gold reviews shared across zero-shot,
+  few-shot v2, and CoT. The Streamlit evaluation page filters each existing
+  independent annotator workspace to that cohort and displays actual completion
+  out of 15. Non-selected rows and the historical 300-review assignment remain
+  untouched.
+- Strategy comparison validates the selected gold records and source identity,
+  scores all three strategies over the same cohort, reports common-label macro
+  precision/recall/F1, and includes invalid/missing prediction diagnostics.
+- No comparison metrics are claimed. Both independent annotation workspaces and
+  the adjudicated 15-record gold set still need completion. Each prompting
+  strategy also needs its own manually reviewed and approved pilot before full
+  extraction.
 
 ## Extraction and evaluation still pending
 
-1. Complete and validate the remaining development and human evaluation
-  annotations; keep evaluation IDs disjoint from development and pilot IDs.
-2. Full-dataset extraction has not been run. If it is required, review the existing
-  pilot's documented issues, confirm account access to `gpt-6-luna`, and follow
-  the approval-gated pipeline workflow.
-3. Do not calculate or report evaluation metrics until the human gold annotations
-  are complete. Keep AI silver records separate from ground truth.
-4. Real-model summaries/judge remain unverified in the current handover artifacts.
+1. Finish and adjudicate the same 15 IDs; preserve all other annotation records.
+2. Run separate reviewed/approved strategy pilots and full extractions if API use
+   is authorized. This handover did not make API calls.
+3. Run the three-strategy comparison only after the 15 human-gold records and all
+   predictions validate. Keep the 63 AI silver records separate from gold.
+4. Real-model summaries/Judge remain unverified in the current handover artifacts.
 
 The pilot does have model predictions, token usage, estimated cost, and latency
 recorded in its manifest; these figures apply only to that pilot. No full-dataset
 extraction or human-gold evaluation metrics are claimed. Human annotation/evaluation
 remains Member 3's work; frontend integration remains Member 4's work.
+
+## Preserved project deliverables
+
+- Structured extraction, JSONL output, CSV export, aggregation, per-product
+  summary code, and bounded extraction validation retries remain in place.
+- `extract_json_object` can extract fenced/surrounded JSON but does not repair
+  malformed JSON syntax; exhausted parse/validation failures are logged. A
+  dedicated syntax-repair step remains incomplete.
+- Two saved summaries are extractive; the faithfulness report has zero LLM-Judge
+  claims. Real LLM summary/Judge evaluation remains pending.

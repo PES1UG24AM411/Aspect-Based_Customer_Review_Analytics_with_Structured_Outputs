@@ -14,6 +14,49 @@ import pandas as pd
 
 from src.extraction.config import PROJECT_ROOT
 
+HUMAN_EVALUATION_SIZE = 15
+
+
+def select_human_evaluation_ids(
+    splits,
+    assignment,
+    *,
+    target_size=HUMAN_EVALUATION_SIZE,
+):
+    """Select a stable subset of the existing shared evaluation cohort.
+
+    The assignment file already identifies reviews independently annotated by
+    both annotators. Taking its first ``target_size`` IDs preserves that
+    allocation and does not create or rewrite annotation records.
+    """
+    eval_ids = [str(review_id) for review_id in splits.get("eval_ids", [])]
+    dev_ids = {str(review_id) for review_id in splits.get("dev_ids", [])}
+    shared_ids = [
+        str(review_id) for review_id in assignment.get("shared_review_ids", [])
+    ]
+
+    if len(eval_ids) != len(set(eval_ids)):
+        raise ValueError("Evaluation split contains duplicate review IDs.")
+    if len(shared_ids) != len(set(shared_ids)):
+        raise ValueError("Shared annotation assignment contains duplicate IDs.")
+
+    eval_set = set(eval_ids)
+    invalid_shared = [review_id for review_id in shared_ids if review_id not in eval_set]
+    if invalid_shared:
+        raise ValueError(
+            "Shared annotation IDs are not in the evaluation split: "
+            + ", ".join(invalid_shared[:5])
+        )
+
+    selected = shared_ids[:target_size]
+    if len(selected) != target_size:
+        raise ValueError(
+            f"Need {target_size} shared evaluation reviews; found {len(selected)}."
+        )
+    if dev_ids.intersection(selected):
+        raise ValueError("Selected human evaluation IDs overlap the dev split.")
+    return selected
+
 
 def bucket(rating):
     try:

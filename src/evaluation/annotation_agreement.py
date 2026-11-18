@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 
 from src.evaluation.metrics import match_review, cohen_kappa, confusion
+from src.evaluation.sampling import select_human_evaluation_ids
 
 
 SENTIMENT_LABELS = ["positive", "negative", "neutral"]
@@ -215,6 +216,10 @@ def main():
     assignment = json.loads(
         (base / "annotation_assignment.json").read_text(encoding="utf-8")
     )
+    splits = json.loads(
+        (base / "splits.json").read_text(encoding="utf-8")
+    )
+    selected_ids = select_human_evaluation_ids(splits, assignment)
 
     annotator_1 = load_jsonl(base / assignment["annotator_1_file"])
     annotator_2 = load_jsonl(base / assignment["annotator_2_file"])
@@ -222,8 +227,12 @@ def main():
     report = calculate_agreement(
         annotator_1,
         annotator_2,
-        assignment["shared_review_ids"],
+        selected_ids,
         mode=args.mode,
+    )
+    report["review_selection"] = (
+        "First 15 IDs in the existing shared-review assignment, which is a subset "
+        "of the seed-42 evaluation split."
     )
 
     output = Path(args.output)

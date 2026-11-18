@@ -256,7 +256,8 @@ def run(limit=10, pilot=True, *, full=False, client=None, dataset=None, out_dir=
         require_pilot_approval(
             reports_dir=reports_dir,
             out_dir=approval_out_dir,
-            dataset=dataset
+            dataset=dataset,
+            strategy=strategy,
         )
 
     df = english_eligible(dataset)
@@ -343,7 +344,7 @@ if __name__=="__main__":
     ap.add_argument("--out-dir", default="data/ai_annotation_pilot_5")
     ap.add_argument("--reports-dir", default="reports/ai_annotation_pilot_5")
     ap.add_argument("--preflight",action="store_true",help="Validate local setup without making API calls")
-    ap.add_argument("--full",action="store_true",help="Process all remaining English reviews (requires reports/pilot_approval.json)")
+    ap.add_argument("--full",action="store_true",help="Process all remaining English reviews after matching pilot approval")
     ap.add_argument("--workers",type=int,default=1,help="Parallel requests for --full")
     ap.add_argument(
     "--strategy",
@@ -369,9 +370,29 @@ if __name__=="__main__":
     if args.approve_pilot:
         from .approval import approve_pilot
         if not args.reviewer: raise SystemExit("--reviewer NAME is required")
-        approve_pilot(reviewer=args.reviewer, notes=args.notes); raise SystemExit(0)
+        if args.strategy:
+            from pathlib import Path
+            approve_pilot(
+                reviewer=args.reviewer,
+                notes=args.notes,
+                reports_dir=Path(args.reports_dir) / args.strategy,
+                out_dir=Path(args.out_dir) / args.strategy,
+                strategy=args.strategy,
+            )
+        else:
+            approve_pilot(reviewer=args.reviewer, notes=args.notes)
+        raise SystemExit(0)
     if args.full:
-        run(full=True, workers=max(1, args.workers), strategy=args.strategy)
+        if args.strategy:
+            run(
+                full=True,
+                workers=max(1, args.workers),
+                strategy=args.strategy,
+                out_dir=args.out_dir,
+                reports_dir=args.reports_dir,
+            )
+        else:
+            run(full=True, workers=max(1, args.workers))
         raise SystemExit(0)
 
     if not 1 <= args.limit <= 10:

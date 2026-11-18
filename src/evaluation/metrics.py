@@ -170,6 +170,30 @@ def evaluate(gold_records, pred_records, *, mode="lenient"):
         "per_aspect_extraction": {k: prf(*v) for k, v in sorted(per_aspect.items(), key=lambda kv: -sum(kv[1]))},
         "error_counts": dict(Counter(e["type"] for e in errors)),
     }
-    macro_f1 = [v["f1"] for v in result["per_aspect_extraction"].values() if v["tp"] + v["fn"] > 0]
-    result["aspect_extraction"]["macro_f1_over_gold_aspect_classes"] = round(sum(macro_f1) / len(macro_f1), 4) if macro_f1 else 0.0
+    gold_aspect_classes = {
+        normalize_aspect(aspect["aspect_term"])
+        for record in gold_records.values()
+        for aspect in record["aspects"]
+    }
+    macro = {
+        metric: [
+            result["per_aspect_extraction"].get(
+                aspect_class, prf(0, 0, 0)
+            )[metric]
+            for aspect_class in sorted(gold_aspect_classes)
+        ]
+        for metric in ("precision", "recall", "f1")
+    }
+    result["aspect_extraction"]["macro_precision_over_gold_aspect_classes"] = (
+        round(sum(macro["precision"]) / len(macro["precision"]), 4)
+        if macro["precision"] else 0.0
+    )
+    result["aspect_extraction"]["macro_recall_over_gold_aspect_classes"] = (
+        round(sum(macro["recall"]) / len(macro["recall"]), 4)
+        if macro["recall"] else 0.0
+    )
+    result["aspect_extraction"]["macro_f1_over_gold_aspect_classes"] = (
+        round(sum(macro["f1"]) / len(macro["f1"]), 4)
+        if macro["f1"] else 0.0
+    )
     return result, errors

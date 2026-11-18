@@ -2,8 +2,17 @@ import json
 import pytest
 from src.analysis.aspect_normalizer import normalize_aspect
 from src.evaluation import metrics as M
-from src.evaluation.run_eval import load_gold, write_report
-from src.evaluation.sampling import make_splits, write_splits
+from src.evaluation.run_eval import (
+    compare_prompt_strategies,
+    load_gold,
+    load_strategy_predictions,
+    write_report,
+)
+from src.evaluation.sampling import (
+    make_splits,
+    select_human_evaluation_ids,
+    write_splits,
+)
 import pandas as pd
 
 TEXT = "The camera is excellent, but the battery drains too quickly. Delivery was late."
@@ -105,6 +114,166 @@ def test_splits_deterministic_disjoint_and_exclude_pilot():
     assert a == b
     dev, ev = a
     assert not set(dev) & set(ev) and set(pilot) <= set(dev) and len(ev) == 100
+
+
+def test_human_sample_uses_existing_shared_assignment_deterministically():
+    splits = {
+        "dev_ids": ["D1"],
+        "eval_ids": [f"R{i}" for i in range(20)],
+    }
+    assignment = {
+        "shared_review_ids": [f"R{i}" for i in range(18)],
+    }
+
+    selected = select_human_evaluation_ids(splits, assignment)
+
+    assert selected == [f"R{i}" for i in range(15)]
+    assert selected == select_human_evaluation_ids(splits, assignment)
+    assert not set(selected).intersection(splits["dev_ids"])
+
+
+def test_strategy_comparison_scores_same_fifteen_human_gold_reviews(tmp_path):
+    review_ids = [f"R{i:02}" for i in range(15)]
+    splits = tmp_path / "splits.json"
+    splits.write_text(json.dumps({"dev_ids": ["D1"], "eval_ids": review_ids}))
+    assignment = tmp_path / "assignment.json"
+    assignment.write_text(json.dumps({"shared_review_ids": review_ids}))
+    gold_path = tmp_path / "gold.jsonl"
+    gold_rows = [
+        {
+            "review_id": review_id,
+            "product_id": "P1",
+            "review_text": "The camera is excellent.",
+            "annotator": "human",
+            "status": "complete",
+            "aspects": [asp("camera", "positive", "The camera is excellent")],
+        }
+        for review_id in review_ids
+    ]
+    gold_path.write_text("\n".join(json.dumps(row) for row in gold_rows) + "\n")
+    dataset_path = tmp_path / "dataset.csv"
+    pd.DataFrame([
+        {
+            "review_id": review_id,
+            "product_id": "P1",
+            "review_text": "The camera is excellent.",
+            "language": "English",
+        }
+        for review_id in review_ids
+    ]).to_csv(dataset_path, index=False)
+
+    prediction_paths = {}
+    for strategy in ("zero_shot", "few_shot", "cot"):
+        path = tmp_path / f"{strategy}.jsonl"
+        rows = [
+            {
+                "schema_version": "1.0",
+                "review_id": review_id,
+                "product_id": "P1",
+                "review_text": "The camera is excellent.",
+                "aspects": [{
+                    "aspect_id": "A1",
+                    "aspect_term": "camera",
+                    "sentiment": "positive",
+                    "evidence": "The camera is excellent",
+                    "complaint_present": False,
+                    "complaint_evidence": None,
+                }],
+                "extraction_status": "success",
+            }
+            for review_id in review_ids
+        ]
+        path.write_text("\n".join(json.dumps(row) for row in rows) + "\n")
+        prediction_paths[strategy] = path
+
+    report = compare_prompt_strategies(
+        gold_path=gold_path,
+        splits_path=splits,
+        assignment_path=assignment,
+        dataset_path=dataset_path,
+        prediction_paths=prediction_paths,
+    )
+
+    assert report["evaluation_sample"]["target_reviews"] == 15
+    assert report["evaluation_sample"]["review_ids"] == review_ids
+    for strategy in ("zero_shot", "few_shot", "cot"):
+        entry = report["strategies"][strategy]
+        result = entry["metrics"]
+        assert result["reviews_scored"] == 15
+        assert entry["macro_aspect_metrics"]["precision"] == 1.0
+        assert entry["macro_aspect_metrics"]["recall"] == 1.0
+        assert entry["macro_aspect_metrics"]["f1"] == 1.0
+
+
+def test_strategy_predictions_report_invalid_and_missing_as_reviews(tmp_path):
+    gold = {
+        "R1": {"review_id": "R1", "product_id": "P1", "review_text": TEXT, "aspects": []},
+        "R2": {"review_id": "R2", "product_id": "P2", "review_text": TEXT, "aspects": []},
+    }
+    path = tmp_path / "predictions.jsonl"
+    invalid = {
+        "schema_version": "1.0",
+        "review_id": "R1",
+        "product_id": "WRONG",
+        "review_text": TEXT,
+        "aspects": [],
+        "extraction_status": "success",
+    }
+    outside = {
+        "schema_version": "1.0",
+        "review_id": "OTHER",
+        "product_id": "P1",
+        "review_text": TEXT,
+        "aspects": [],
+        "extraction_status": "success",
+    }
+    path.write_text(json.dumps(invalid) + "\n" + json.dumps(outside) + "\n")
+
+    predictions, diagnostics = load_strategy_predictions(path, gold)
+
+    assert set(predictions) == {"R1", "R2"}
+    assert predictions["R1"]["aspects"] == []
+    assert predictions["R2"]["aspects"] == []
+    assert diagnostics["missing_or_invalid_review_ids"] == ["R1", "R2"]
+    assert diagnostics["invalid_record_count"] == 1
+    assert diagnostics["ignored_out_of_sample_records"] == 1
+
+
+def test_strategy_comparison_rejects_incomplete_human_gold(tmp_path):
+    review_ids = [f"R{i:02}" for i in range(15)]
+    splits = tmp_path / "splits.json"
+    splits.write_text(json.dumps({"dev_ids": [], "eval_ids": review_ids}))
+    assignment = tmp_path / "assignment.json"
+    assignment.write_text(json.dumps({"shared_review_ids": review_ids}))
+    gold_path = tmp_path / "gold.jsonl"
+    row = {
+        "review_id": review_ids[0],
+        "product_id": "P1",
+        "review_text": TEXT,
+        "status": "complete",
+        "annotator": "human",
+        "aspects": [],
+    }
+    gold_path.write_text(json.dumps(row) + "\n")
+    dataset_path = tmp_path / "dataset.csv"
+    pd.DataFrame([
+        {
+            "review_id": review_id,
+            "product_id": "P1",
+            "review_text": TEXT,
+            "language": "English",
+        }
+        for review_id in review_ids
+    ]).to_csv(dataset_path, index=False)
+
+    with pytest.raises(SystemExit, match="Human gold is incomplete"):
+        compare_prompt_strategies(
+            gold_path=gold_path,
+            splits_path=splits,
+            assignment_path=assignment,
+            dataset_path=dataset_path,
+            prediction_paths={"zero_shot": "x", "few_shot": "y", "cot": "z"},
+        )
 
 
 def test_report_files_written(tmp_path):

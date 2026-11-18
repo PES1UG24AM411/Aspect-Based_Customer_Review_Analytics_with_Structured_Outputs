@@ -161,12 +161,16 @@ the script runs.
   prompt, model, schema, and dataset hash.
 - Full-dataset extraction has **not** been run. The pilot approval does not mean
   the remaining reviews have been extracted.
-- The development split has 20 records, of which 5 are marked complete and 15
-  remain todo. The 300-record human evaluation file has 1 complete record and
-  299 todo. Human evaluation metrics are therefore not available.
-- `data/evaluation/ai_annotations.jsonl` contains AI-generated silver annotations,
-  not human gold labels. Its run and recovery manifests are separate from the
-  approved 10-review extraction pilot. Do not use silver annotations as gold.
+- The guide-approved human evaluation target is 15 unique reviews. The stable
+  cohort is the first 15 IDs in the existing shared-review assignment, which is
+  part of the seed-42 evaluation split. Each annotator has an independent
+  workspace for the same 15 reviews. Current completion: 0/15 in each annotator
+  workspace and 1/15 in the retained consolidated gold file. The old 300-review
+  split and annotation records remain intact; no final evaluation metrics exist.
+- `data/evaluation/ai_annotations.jsonl` contains 63 AI-generated silver
+  annotations, not human gold labels. Do not use silver records for scoring.
+- Zero-shot, few-shot v2, and CoT prompts are present. Their comparison has not
+  been run; see the evaluation instructions and status reports below.
 - See [reports/handover_status.md](reports/handover_status.md) and
   [reports/member2_completion_status.md](reports/member2_completion_status.md)
   for current validation details and remaining work.
@@ -218,17 +222,52 @@ the manifest shows `"complete": true`.
 
 ## Stage C - evaluation (requires human gold labels)
 
-1. `data/evaluation/splits.json` holds the deterministic dev/eval split (seed 42; eval is disjoint from dev and pilot).
-2. The current evaluation template contains 300 eval reviews. Complete the human
-  annotations in `data/evaluation/gold_annotations.jsonl` per
-  `docs/annotation_guidelines.md`; do not substitute model output or the silver
-  annotation file for human labels.
-3. `python -m src.evaluation.run_eval [--mode strict|lenient]`
+The guide-approved target is 15 unique human-gold reviews. The app selects the
+first 15 IDs from the existing 30-review shared assignment, itself drawn from
+the seed-42 evaluation split. Both annotators continue working independently on
+that same subset; the existing 300-row workspaces and consolidated gold file are
+preserved. The app shows completion progress for the selected 15 only. Resolve
+disagreements and adjudicate one human gold record per selected review into
+`data/evaluation/gold_annotations.jsonl` before scoring. The evaluator schema-
+validates gold and checks selected IDs, product IDs, and review text against the
+processed dataset.
 
-Outputs in `reports/evaluation/`: `evaluation_metrics.json`, `evaluation_report.md`, `error_analysis.csv`, confusion-matrix PNGs.
-Metrics: aspect P/R/F1 (+bootstrap CI), joint aspect+sentiment, sentiment per-class/macro/weighted/accuracy/kappa and confusion
-matrix, complaint P/R/F1 (aspect and review level), per-aspect scores. The command refuses to run without completed gold labels
-or if gold reviews overlap the dev set.
+Zero-shot, few-shot v2, and CoT runs must each use the same fixed human-gold IDs.
+Each strategy has a separate pilot approval gate bound to its own prompt version.
+For each value `zero_shot`, `few_shot_v2`, and `cot`, run the pilot, review it,
+approve that strategy's pilot, and then run full extraction. Example for one
+strategy (the pilot and full commands make API requests; the approval command is
+local. Run API commands only when explicitly authorized and budgeted):
+
+```bash
+python -m src.extraction.pipeline --strategy zero_shot --out-dir data/extracted --reports-dir reports
+python -m src.extraction.pipeline --strategy zero_shot --approve-pilot --reviewer "Your Name" --out-dir data/extracted --reports-dir reports
+python -m src.extraction.pipeline --strategy zero_shot --full --out-dir data/extracted --reports-dir reports
+```
+
+Repeat with the other strategy names. The full runs require a separate completed
+pilot approval for each strategy. No model runs are performed by the comparison
+command. Once all three prediction files and all 15 adjudicated gold records exist,
+run:
+
+```bash
+python -m src.evaluation.run_eval --compare-strategies --mode lenient
+```
+
+Default prediction inputs are `data/extracted/zero_shot/predictions.jsonl`,
+`data/extracted/few_shot_v2/predictions.jsonl`, and
+`data/extracted/cot/predictions.jsonl`; use `--zero-shot-predictions`,
+`--few-shot-predictions`, or `--cot-predictions` to override paths. Results are
+written under `reports/evaluation/` and use the same 15 records for every
+strategy. The report includes macro precision, recall, and F1 over a common set
+of normalized aspect classes, prediction coverage, invalid records, and missing
+IDs. Missing or invalid per-review predictions count as an empty extraction,
+not as dropped reviews. AI silver annotations are never loaded as gold.
+
+The 15-review sample is small and supports only an exploratory comparison; it
+limits precision and generalizability. Do not claim metrics until all three
+experiments have actually run. The older single-prediction evaluator remains
+available as `python -m src.evaluation.run_eval --predictions ...`.
 
 ## Stage D - product analysis
 `python -m src.analysis.aggregate` -> `data/analysis/` (aspect frequency, sentiment distribution, complaints, recurring negative
@@ -244,13 +283,33 @@ The judge is a consistency check, **not** ground truth and not a substitute for 
 `streamlit run app/streamlit_app.py`. Reads the outputs above. Without predictions it shows status messages; the sidebar
 "MOCK" option previews the UI using a keyword rule set (clearly bannered, not model output).
 
+## Other deliverables and current evidence
+
+- Structured extraction schemas, source/evidence validation, JSONL predictions,
+  and CSV export are implemented. The pipeline has bounded validation retries
+  and logs exhausted failures.
+- JSON output handling extracts a JSON object from fenced or surrounding text,
+  but it does not repair syntactically malformed JSON. Invalid parse/validation
+  responses are retried and then recorded as failures; a separate, explicit
+  malformed-syntax repair feature remains incomplete.
+- Product aggregation and per-product extractive/LLM summary code are present.
+  The current saved summaries contain two extractive records. The faithfulness
+  report says `no_llm_judge_results` (zero judged claims), so real LLM-as-Judge
+  faithfulness evaluation remains pending.
+- Extraction, aggregation, and summarization are available as separate stages;
+  summaries build from validated extraction evidence. The LLM summarizer and
+  Judge require API-backed runs and have not been verified here.
+
 ## Tests
 `pytest -q` (offline; uses fake/mock clients, no API calls). Covers preprocessing, extraction, approval gate, resume, retries,
 auth failure, missing key, evaluation metrics, aggregation, summaries, and every Streamlit page.
 
 ## Limitations
 - Only the approved 10-review pilot has been run through the extraction pipeline; full-dataset extraction and human-gold evaluation remain incomplete.
-- AI-generated silver annotation files and run manifests may exist locally, but they are not human ground truth and do not support accuracy/F1 claims.
+- The 15-review human sample is not yet fully annotated/adjudicated; the three prompting strategies have not yet been compared.
+- The 63 existing AI-generated silver annotations are separate from human gold and do not support accuracy/F1 claims.
+- Explicit syntax repair for malformed JSON remains incomplete; bounded parse/validation retries and failure logging are not the same as repairing malformed syntax.
+- LLM summary/Judge faithfulness evaluation is not complete unless saved judge verdicts exist; offline structural checks are not an LLM-as-Judge result.
 - The mock extractor (`src/extraction/mock_client.py`) exists for tests/UI previews only.
 - Aspect normalisation is heuristic; lenient matching is a convention, so report the mode used.
 - Cost estimates in manifests use the prices in `src/extraction/config.py`; verify them.
